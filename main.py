@@ -13,7 +13,7 @@ def analyze(
     capital: float = Query(..., description="Capital in GBP")
 ):
     try:
-        result = analyze_stock(ticker, float(capital))
+        result = analyze_stock(ticker, capital)
         return result
     except Exception as e:
         return {"error": "Internal Server Error", "details": str(e)}
