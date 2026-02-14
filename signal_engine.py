@@ -19,7 +19,7 @@ def analyze_stock(ticker: str, capital: float):
     data = yf.download(ticker, period="2y", interval="1d", progress=False)
 
     if data.empty:
-    return {"error": f"No data found for ticker {ticker}"}
+        return {"error": f"No data found for ticker {ticker}"}
 
     data["MA50"] = data["Close"].rolling(50).mean()
     data["MA200"] = data["Close"].rolling(200).mean()
