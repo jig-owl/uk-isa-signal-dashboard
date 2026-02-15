@@ -1,4 +1,5 @@
 import yfinance as yf
+import pandas as pd
 import ta
 
 def analyze_stock(ticker: str, capital: float):
@@ -8,10 +9,17 @@ def analyze_stock(ticker: str, capital: float):
     if data.empty:
         return {"error": f"No data found for ticker {ticker}"}
 
-    data["MA50"] = data["Close"].rolling(50).mean()
-    data["MA200"] = data["Close"].rolling(200).mean()
-    data["RSI"] = ta.momentum.RSIIndicator(data["Close"], window=14).rsi()
-    data["VolumeMA"] = data["Volume"].rolling(20).mean()
+    # If MultiIndex columns exist (new yfinance behavior), flatten them
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.get_level_values(0)
+
+    close_series = data["Close"].squeeze()
+    volume_series = data["Volume"].squeeze()
+
+    data["MA50"] = close_series.rolling(50).mean()
+    data["MA200"] = close_series.rolling(200).mean()
+    data["RSI"] = ta.momentum.RSIIndicator(close_series, window=14).rsi()
+    data["VolumeMA"] = volume_series.rolling(20).mean()
 
     latest = data.iloc[-1]
 
