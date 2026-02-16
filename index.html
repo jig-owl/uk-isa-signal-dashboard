@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK ISA Signal Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>UK ISA Signal Dashboard</h1>
+
+        <div class="form-group">
+            <label for="ticker">Ticker (e.g., BP.L, HSBA.L)</label>
+            <input type="text" id="ticker" placeholder="Enter ticker">
+        </div>
+
+        <div class="form-group">
+            <label for="capital">Capital (£)</label>
+            <input type="number" id="capital" placeholder="Enter capital" value="500">
+        </div>
+
+        <button id="analyze-btn">Analyze</button>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
