@@ -1,71 +1,64 @@
+# signal_engine.py
 import yfinance as yf
 import pandas as pd
-import ta
+import numpy as np
+
+def currency_symbol(curr):
+    """Convert currency code to symbol."""
+    return {"USD":"$", "GBP":"£", "EUR":"€"}.get(curr, curr)
 
 def analyze_stock(ticker: str, capital: float):
+    # Download historical data
+    df = yf.download(ticker, period="2y", interval="1d")
+    if df.empty:
+        return {"error": "Ticker not found or no data available"}
 
-    data = yf.download(ticker, period="2y", interval="1d", progress=False)
+    # Calculate simple moving average
+    df["MA200"] = df["Close"].rolling(window=200).mean()
+    
+    # Relative Strength Index (RSI)
+    delta = df["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=14).mean()
+    avg_loss = loss.rolling(window=14).mean()
+    rs = avg_gain / avg_loss
+    df["RSI"] = 100 - (100 / (1 + rs))
+    
+    latest = df.iloc[-1]
 
-    if data.empty:
-        return {"error": f"No data found for ticker {ticker}"}
+    # Determine trend
+    trend = "Bullish" if latest["Close"] > latest["MA200"] else "Bearish"
 
-    # Flatten MultiIndex columns if present
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-
-    close_series = data["Close"].squeeze()
-    volume_series = data["Volume"].squeeze()
-
-    data["MA50"] = close_series.rolling(50).mean()
-    data["MA200"] = close_series.rolling(200).mean()
-    data["RSI"] = ta.momentum.RSIIndicator(close_series, window=14).rsi()
-    data["VolumeMA"] = volume_series.rolling(20).mean()
-
-    latest = data.iloc[-1]
-
-    close = float(latest["Close"])
-    ma50 = float(latest["MA50"])
-    ma200 = float(latest["MA200"])
-    rsi = float(latest["RSI"])
-    volume = float(latest["Volume"])
-    volume_ma = float(latest["VolumeMA"])
-
-    buy_condition = (
-        close > ma200 and
-        ma50 > ma200 and
-        rsi < 45 and
-        volume > volume_ma
-    )
-
-    sell_condition = (
-        close < ma50 or
-        rsi > 75
-    )
-
-    if buy_condition:
+    # Simple trading signal
+    if latest["RSI"] < 30:
         signal = "BUY"
-        reason = "Uptrend + RSI pullback + volume support"
-    elif sell_condition:
+        reason = "Oversold"
+    elif latest["RSI"] > 70:
         signal = "SELL"
-        reason = "Momentum weakening or overbought"
+        reason = "Overbought or momentum weakening"
     else:
         signal = "HOLD"
         reason = "No strong edge detected"
 
-    trend = "Bullish" if close > ma200 else "Bearish"
+    # Risk and position sizing
+    risk_per_trade = 25.0  # can be parameterized
+    stop_price = latest["Close"] * 0.92  # example: 8% stop
+    position_size = capital * (risk_per_trade / 100) / (latest["Close"] - stop_price)
 
-    risk_per_trade = capital * 0.05
-    stop_distance = 0.08
-    position_size = risk_per_trade / stop_distance
+    # Detect currency dynamically
+    ticker_info = yf.Ticker(ticker).info
+    currency = currency_symbol(ticker_info.get("currency", "$"))
 
     return {
         "ticker": ticker,
         "signal": signal,
         "reason": reason,
-        "price": round(close, 2),
+        "price": round(latest["Close"], 2),
         "trend": trend,
-        "rsi": round(rsi, 2),
+        "rsi": round(latest["RSI"], 2),
         "position_size": round(position_size, 2),
         "risk_per_trade": round(risk_per_trade, 2),
-        "stop_price": round(close * (1 - stop_distance), 2)
+        "stop_price": round(stop_price, 2),
+        "currency": currency
     }
