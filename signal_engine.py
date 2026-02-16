@@ -1,61 +1,47 @@
-# signal_engine.py
 import yfinance as yf
 import pandas as pd
-import numpy as np
+
+def get_currency(ticker: str) -> str:
+    """Detect currency based on ticker suffix."""
+    if ticker.endswith(".L"):
+        return "£"
+    else:
+        return "$"
 
 def analyze_stock(ticker: str, capital: float):
-    """
-    Analyze a stock and return a trading signal with metrics.
-    """
+    # Fetch historical data
+    data = yf.download(ticker, period="1y")
+    if data.empty:
+        raise ValueError(f"No data found for ticker {ticker}")
 
-    # Download historical data
-    df = yf.download(ticker, period="1y", interval="1d")
-    if df.empty:
-        return {"error": f"No data found for {ticker}"}
+    # Calculate indicators
+    data["MA200"] = data["Close"].rolling(window=200).mean()
+    data["RSI"] = compute_rsi(data["Close"], window=14)
 
-    # Calculate moving averages
-    df["MA50"] = df["Close"].rolling(window=50).mean()
-    df["MA200"] = df["Close"].rolling(window=200).mean()
+    latest = data.iloc[-1]
 
-    # Calculate RSI
-    delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=14).mean()
-    avg_loss = loss.rolling(window=14).mean()
-    rs = avg_gain / avg_loss
-    df["RSI"] = 100 - (100 / (1 + rs))
+    # Signal logic
+    signal = "HOLD"
+    reason = "No strong edge detected"
+    if latest["Close"] > latest["MA200"] and latest["RSI"] < 70:
+        signal = "BUY"
+        reason = "Price above 200-day MA and RSI not overbought"
+    elif latest["Close"] < latest["MA200"] or latest["RSI"] > 70:
+        signal = "SELL"
+        reason = "Momentum weakening or overbought"
 
-    # Get the latest row
-    latest = df.iloc[-1]
-
-    # Trend determination (scalar comparison)
+    # Trend (scalar comparison to avoid Series mismatch)
     trend = "Bullish" if latest["Close"] > latest["MA200"] else "Bearish"
 
-    # Simple signal logic
-    if latest["RSI"] < 30 and trend == "Bullish":
-        signal = "BUY"
-        reason = "Oversold but uptrend"
-    elif latest["RSI"] > 70 and trend == "Bearish":
-        signal = "SELL"
-        reason = "Overbought and downtrend"
-    else:
-        signal = "HOLD"
-        reason = "No strong edge detected"
+    # Position sizing
+    risk_per_trade = 25  # £ or $ per trade
+    position_size = min(capital, 500)  # Example fixed position logic
+    stop_price = latest["Close"] - (latest["Close"] * 0.08) if signal == "BUY" else latest["Close"] + (latest["Close"] * 0.08)
 
-    # Position sizing (example: 5% of capital per trade)
-    risk_per_trade = 25  # Fixed for demo
-    position_size = min(capital * 0.625, 312.5)  # Example cap
+    currency = get_currency(ticker)
 
-    # Stop price (10% buffer)
-    stop_price = latest["Close"] * (0.9 if signal == "BUY" else 1.1)
-
-    # Detect currency symbol dynamically from ticker ('.L' = GBP, else default USD)
-    currency = "£" if ticker.upper().endswith(".L") else "$"
-
-    # Build result
-    result = {
-        "ticker": ticker.upper(),
+    return {
+        "ticker": ticker,
         "signal": signal,
         "reason": reason,
         "price": round(latest["Close"], 2),
@@ -67,4 +53,15 @@ def analyze_stock(ticker: str, capital: float):
         "currency": currency
     }
 
-    return result
+def compute_rsi(series: pd.Series, window: int = 14) -> pd.Series:
+    """Calculate the Relative Strength Index (RSI)."""
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(window=window, min_periods=1).mean()
+    avg_loss = loss.rolling(window=window, min_periods=1).mean()
+
+    rs = avg_gain / (avg_loss + 1e-9)  # Avoid division by zero
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
